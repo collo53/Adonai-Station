@@ -510,6 +510,28 @@ public List<CakeDistributed> getCakesDistributedOnDate(Date selectedDate, String
         }
         return sales;
     }
+    public Double getCakePriceByName(String cakeName) {
+        String query = "SELECT price FROM inventory WHERE cake_name = ?";
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setString(1, cakeName);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    double price = rs.getDouble("price");
+                    System.out.println("Fetched price for " + cakeName + ": " + price);
+                    return price;
+                } else {
+                    System.out.println("Cake not found: " + cakeName);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null; // Return null if not found or on error
+    }
+
 
 }
 

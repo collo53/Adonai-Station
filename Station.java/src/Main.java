@@ -1,4 +1,6 @@
 import  javax.swing.*;//TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.table.*;
 import java.awt.*;
 import java.awt.event.ActionListener;
@@ -212,7 +214,7 @@ public class Main extends JFrame {
             Component c = super.prepareRenderer(renderer, row, column);
             if (!isRowSelected(row)) {
                 // Alternate row colors for better readability
-                c.setBackground(row % 2 == 0 ? UIManager.getColor("Table.background") : UIManager.getColor("Table.alternateRowColor"));
+                c.setBackground(row % 2 == 0 ? new Color(240, 240, 240) : new Color(225, 225, 225));
             }
             return c;
         }
@@ -383,7 +385,7 @@ public class Main extends JFrame {
                 Component c = super.prepareRenderer(renderer, row, column);
                 if (!isRowSelected(row)) {
                     // Alternate row colors for better readability
-                    c.setBackground(row % 2 == 0 ? UIManager.getColor("Table.background") : UIManager.getColor("Table.alternateRowColor"));
+                    c.setBackground(row % 2 == 0 ? new Color(240, 240, 240) : new Color(225, 225, 225));
                 }
                 return c;
             }
@@ -515,7 +517,7 @@ public class Main extends JFrame {
 
         // Create content panel with GridBagLayout
         JPanel contentPanel = new JPanel(new GridBagLayout());
-        contentPanel.setBackground(new Color(245, 245, 245)); // Light background color
+        contentPanel.setBackground(new Color(230, 238, 245)); // Light background color
         contentPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20)); // Add padding
 
         GridBagConstraints gbc = new GridBagConstraints();
@@ -530,7 +532,7 @@ public class Main extends JFrame {
         String[] cakeNames = fetchCakeNames(); // Method to fetch cake names from the database
         JComboBox<String> itemNameComboBox = new JComboBox<>(cakeNames);
         itemNameComboBox.setEditable(true); // Make the combo box editable
-        itemNameComboBox.setFont(new Font("Arial", Font.PLAIN, 16));
+        itemNameComboBox.setFont(new Font("Arial", Font.BOLD, 16));
         gbc.gridx = 1;
         contentPanel.add(itemNameComboBox, gbc);
 
@@ -539,7 +541,7 @@ public class Main extends JFrame {
         gbc.gridy = 1;
         contentPanel.add(new JLabel("Quantity:"), gbc);
         JTextField quantityField = new JTextField();
-        quantityField.setFont(new Font("Arial", Font.PLAIN, 16));
+        quantityField.setFont(new Font("Arial", Font.BOLD, 16));
         gbc.gridx = 1;
         contentPanel.add(quantityField, gbc);
 
@@ -552,7 +554,7 @@ public class Main extends JFrame {
             String itemName = (String) itemNameComboBox.getSelectedItem();
             String quantity = quantityField.getText();
 
-            if (  itemName.isEmpty() || quantity.isEmpty()) {
+            if (itemName.isEmpty() || quantity.isEmpty()) {
                 JOptionPane.showMessageDialog(addItemsSoldDialog, "Please fill in all fields.", "Error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
@@ -560,10 +562,31 @@ public class Main extends JFrame {
             try {
                 int qty = Integer.parseInt(quantity);
                 Helper db = new Helper();
-                db.addItemsSold(stationName, itemName, qty); // Pass station name
+
+                // Load distributed cakes for this station
+                List<CakeDistributed> distributedCakes = db.loadCakesDistributed(stationName);
+
+                // Find matching cake entry
+                CakeDistributed matchedCake = distributedCakes.stream()
+                        .filter(c -> c.getCakeName().equalsIgnoreCase(itemName))
+                        .findFirst()
+                        .orElse(null);
+
+                if (matchedCake == null) {
+                    showInsufficientDialog("This item was not distributed to the station.");
+                    return;
+                }
+
+                if (qty > matchedCake.getQuantity()) {
+                    showInsufficientDialog("Only " + matchedCake.getQuantity() + " cakes are available. You cannot sell more than that.");
+                    return;
+                }
+
+                // Proceed with sale
+                db.addItemsSold(stationName, itemName, qty); // Save to DB
                 addItemsSoldDialog.dispose();
 
-                // Update the UI table with station-specific data
+                // Update table
                 String currentTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
                 tableModel.addRow(new Object[]{itemName, qty, currentTime});
 
@@ -585,12 +608,63 @@ public class Main extends JFrame {
         addItemsSoldDialog.setVisible(true); // Display dialog
     }
 
+    private static void showInsufficientDialog(String message) {
+        JDialog insufficientDialog = new JDialog();
+        insufficientDialog.setTitle("⚠️ Insufficient Quantity");
+        insufficientDialog.setSize(400, 200);
+        insufficientDialog.setLayout(new BorderLayout());
+        insufficientDialog.setModal(true);
+        insufficientDialog.setLocationRelativeTo(null);
+        insufficientDialog.getContentPane().setBackground(new Color(230, 238, 245));
+
+        // Message Label
+        JLabel msgLabel = new JLabel("<html><div style='text-align: center;'>" + message + "</div></html>", SwingConstants.CENTER);
+        msgLabel.setFont(new Font("Segoe UI", Font.BOLD, 16));
+        msgLabel.setForeground(new Color(60, 60, 60));
+        msgLabel.setBorder(BorderFactory.createEmptyBorder(30, 20, 20, 20));
+
+        // Custom OK Button
+        JButton okButton = new JButton("OK");
+        okButton.setFocusPainted(false);
+        okButton.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        okButton.setBackground(new Color(66, 133, 244));
+        okButton.setForeground(Color.WHITE);
+        okButton.setPreferredSize(new Dimension(100, 40));
+        okButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        okButton.setBorder(BorderFactory.createEmptyBorder());
+
+        // Hover effect
+        okButton.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseEntered(java.awt.event.MouseEvent evt) {
+                okButton.setBackground(new Color(52, 103, 191));
+            }
+            public void mouseExited(java.awt.event.MouseEvent evt) {
+                okButton.setBackground(new Color(66, 133, 244));
+            }
+        });
+
+        okButton.addActionListener(e -> insufficientDialog.dispose());
+
+        JPanel buttonPanel = new JPanel();
+        buttonPanel.setBackground(new Color(250, 250, 250));
+        buttonPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 20, 0));
+        buttonPanel.add(okButton);
+
+        // Rounded dialog (optional for undecorated dialog)
+        insufficientDialog.getRootPane().setBorder(BorderFactory.createLineBorder(new Color(200, 200, 200), 1));
+
+        insufficientDialog.add(msgLabel, BorderLayout.CENTER);
+        insufficientDialog.add(buttonPanel, BorderLayout.SOUTH);
+
+        insufficientDialog.setVisible(true);
+    }
+
 
     // Helper method to create flat styled buttons
     private static JButton createFlatButton(String text, ActionListener actionListener) {
         JButton button = new JButton(text);
         button.setFont(new Font("Arial", Font.BOLD, 14));
-        button.setBackground(new Color(30, 136, 229)); // Blue background
+        button.setBackground( new Color(30,136,129)); // Blue background
         button.setForeground(Color.WHITE);
         button.setFocusPainted(false);
         button.setCursor(new Cursor(Cursor.HAND_CURSOR));
@@ -622,7 +696,7 @@ public class Main extends JFrame {
                 Component c = super.prepareRenderer(renderer, row, column);
                 if (!isRowSelected(row)) {
                     // Alternate row colors for better readability
-                    c.setBackground(row % 2 == 0 ? UIManager.getColor("Table.background") : UIManager.getColor("Table.alternateRowColor"));
+                    c.setBackground(row % 2 == 0 ? new Color(240, 240, 240) : new Color(225, 225, 225));
                 }
                 return c;
             }
@@ -779,9 +853,10 @@ public class Main extends JFrame {
         gbc.anchor = GridBagConstraints.WEST;
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
+        Helper db = new Helper();  // Instantiate only once
+
         // Booker Name
-        gbc.gridx = 0;
-        gbc.gridy = 0;
+        gbc.gridx = 0; gbc.gridy = 0;
         contentPanel.add(new JLabel("Booker Name:"), gbc);
 
         JTextField nameField = new JTextField(20);
@@ -789,20 +864,18 @@ public class Main extends JFrame {
         contentPanel.add(nameField, gbc);
 
         // Cake Name
-        gbc.gridx = 0;
-        gbc.gridy = 1;
+        gbc.gridx = 0; gbc.gridy = 1;
         contentPanel.add(new JLabel("Cake Name:"), gbc);
 
-        String[] cakeNames = fetchCakeNames(); // Method to fetch cake names from the database
+        String[] cakeNames = fetchCakeNames(); // Fetch cake names
         JComboBox<String> cakeNameComboBox = new JComboBox<>(cakeNames);
-        cakeNameComboBox.setEditable(true); // Make the combo box editable
+        cakeNameComboBox.setEditable(true);
         cakeNameComboBox.setFont(new Font("Arial", Font.PLAIN, 16));
         gbc.gridx = 1;
         contentPanel.add(cakeNameComboBox, gbc);
 
         // Quantity
-        gbc.gridx = 0;
-        gbc.gridy = 2;
+        gbc.gridx = 0; gbc.gridy = 2;
         contentPanel.add(new JLabel("Quantity:"), gbc);
 
         JTextField quantityField = new JTextField(10);
@@ -810,8 +883,7 @@ public class Main extends JFrame {
         contentPanel.add(quantityField, gbc);
 
         // Amount Paid
-        gbc.gridx = 0;
-        gbc.gridy = 3;
+        gbc.gridx = 0; gbc.gridy = 3;
         contentPanel.add(new JLabel("Amount Paid:"), gbc);
 
         JTextField amountPaidField = new JTextField(10);
@@ -819,13 +891,37 @@ public class Main extends JFrame {
         contentPanel.add(amountPaidField, gbc);
 
         // Amount Left
-        gbc.gridx = 0;
-        gbc.gridy = 4;
+        gbc.gridx = 0; gbc.gridy = 4;
         contentPanel.add(new JLabel("Amount Left:"), gbc);
 
         JTextField amountLeftField = new JTextField(10);
+        amountLeftField.setEditable(false);  // Make read-only
         gbc.gridx = 1;
         contentPanel.add(amountLeftField, gbc);
+
+        // Auto-update Amount Left
+        Runnable updateAmountLeft = () -> {
+            try {
+                String selectedCake = (String) cakeNameComboBox.getSelectedItem();
+                Double pricePerCake = db.getCakePriceByName(selectedCake);
+
+                if (pricePerCake == null) return;
+
+                int quantity = Integer.parseInt(quantityField.getText().trim());
+                double amountPaid = Double.parseDouble(amountPaidField.getText().trim());
+
+                double totalPrice = quantity * pricePerCake;
+                double amountLeft = totalPrice - amountPaid;
+                amountLeftField.setText(String.format("%.2f", amountLeft));
+            } catch (Exception ignored) {
+                amountLeftField.setText("");
+            }
+        };
+
+        // Listeners to trigger update
+        quantityField.getDocument().addDocumentListener(new SimpleDocumentListener(updateAmountLeft));
+        amountPaidField.getDocument().addDocumentListener(new SimpleDocumentListener(updateAmountLeft));
+        cakeNameComboBox.addActionListener(e -> updateAmountLeft.run());
 
         // Save Button
         JButton saveButton = new JButton("Save");
@@ -837,46 +933,37 @@ public class Main extends JFrame {
 
         openBookDialog.add(contentPanel, BorderLayout.CENTER);
 
-        // Action Listener for Save Button
+        // Save logic
         saveButton.addActionListener(e -> {
-            Helper db = new Helper();
-
             String bookerName = nameField.getText().trim();
             String cakeName = (String) cakeNameComboBox.getSelectedItem();
             String quantityText = quantityField.getText().trim();
             String amountPaidText = amountPaidField.getText().trim();
             String amountLeftText = amountLeftField.getText().trim();
 
-            // Input Validation
             if (bookerName.isEmpty() || cakeName.isEmpty() || quantityText.isEmpty() ||
                     amountPaidText.isEmpty() || amountLeftText.isEmpty()) {
                 JOptionPane.showMessageDialog(openBookDialog, "Please fill in all fields.", "Error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
-            // Get the current date as "Date Booked"
             String dateBooked = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
 
-            // Add data to the table model FIRST
             tableModel.addRow(new Object[]{
                     bookerName,
-                    "Pending", // Default status
+                    "Pending",
                     cakeName,
                     Integer.parseInt(quantityText),
                     dateBooked,
-                    null, // Date Cleared (not yet cleared)
+                    null,
                     Double.parseDouble(amountPaidText),
                     Double.parseDouble(amountLeftText),
                     selectedStation
             });
 
-            // NOW Save to the database
             db.saveBookingsToDatabase(bookingsTable, selectedStation);
-
-            // Close the dialog
             openBookDialog.dispose();
         });
-
 
         openBookDialog.setVisible(true);
     }
